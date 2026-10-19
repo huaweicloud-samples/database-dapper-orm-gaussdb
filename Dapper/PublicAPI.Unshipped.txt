@@ -10,3 +10,5 @@ Dapper.GaussDBDateHandler
 Dapper.GaussDBDateHandler.GaussDBDateHandler() -> void
 override Dapper.GaussDBDateHandler.Parse(object? value) -> System.DateTime
 override Dapper.GaussDBDateHandler.SetValue(System.Data.IDbDataParameter! parameter, System.DateTime value) -> void
+Dapper.GaussDBSetup
+static Dapper.GaussDBSetup.Initialize() -> void

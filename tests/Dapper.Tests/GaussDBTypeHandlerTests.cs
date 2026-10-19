@@ -3,6 +3,9 @@ using Xunit;
 
 namespace Dapper.Tests
 {
+    // GaussDBSetup.Initialize registers type handlers on the process-wide SqlMapper state,
+    // so this class must not run alongside other tests that touch that state.
+    [Collection(NonParallelDefinition.Name)]
     public class GaussDBTypeHandlerTests
     {
         [Fact]
@@ -160,6 +163,24 @@ namespace Dapper.Tests
             var dt = new DateTime(2026, 10, 17);
             handler.SetValue(p, dt);
             Assert.Equal(dt, p.Value);
+        }
+
+        [Fact]
+        public void SetupRegistersHandlers()
+        {
+            GaussDBSetup.Initialize();
+
+            Assert.True(SqlMapper.HasTypeHandler(typeof(byte[])), "byte[] handler 应已注册");
+            Assert.True(SqlMapper.HasTypeHandler(typeof(DateTime)), "DateTime handler 应已注册");
+        }
+
+        [Fact]
+        public void SetupIsIdempotent()
+        {
+            GaussDBSetup.Initialize();
+            GaussDBSetup.Initialize(); // 重复调用不得抛异常
+
+            Assert.True(SqlMapper.HasTypeHandler(typeof(byte[])));
         }
     }
 }
