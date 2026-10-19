@@ -11,6 +11,7 @@ namespace Dapper
         private static readonly FeatureSupport
             Default = new FeatureSupport(false),
             Postgres = new FeatureSupport(true),
+            GaussDB = new FeatureSupport(true),
             ClickHouse = new FeatureSupport(true);
 
         /// <summary>
@@ -21,6 +22,7 @@ namespace Dapper
         {
             string? name = connection?.GetType().Name;
             if (string.Equals(name, "npgsqlconnection", StringComparison.OrdinalIgnoreCase)) return Postgres;
+            if (string.Equals(name, "gaussdbconnection", StringComparison.OrdinalIgnoreCase)) return GaussDB;
             if (string.Equals(name, "clickhouseconnection", StringComparison.OrdinalIgnoreCase)) return ClickHouse;
             return Default;
         }
