@@ -2,3 +2,7 @@
 static Dapper.SqlMapper.Settings.PreferTypeHandlersForEnums.get -> bool
 static Dapper.SqlMapper.Settings.PreferTypeHandlersForEnums.set -> void
 Dapper.DynamicParameters.AddParameters(System.Data.IDbCommand! command) -> void
+Dapper.GaussDBHexByteArrayHandler
+Dapper.GaussDBHexByteArrayHandler.GaussDBHexByteArrayHandler() -> void
+override Dapper.GaussDBHexByteArrayHandler.Parse(object? value) -> byte[]?
+override Dapper.GaussDBHexByteArrayHandler.SetValue(System.Data.IDbDataParameter! parameter, byte[]? value) -> void
