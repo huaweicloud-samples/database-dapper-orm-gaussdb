@@ -15,6 +15,9 @@ namespace Dapper
     /// </remarks>
     public sealed class GaussDBHexByteArrayHandler : SqlMapper.TypeHandler<byte[]?>
     {
+        // Dapper's SqlMapper.LookupDbType resolves byte[] from its built-in type map (DbType.Binary)
+        // before it consults registered type handlers, so Dapper's write path never reaches this method.
+        // It exists to satisfy the TypeHandler<T> contract, and for direct callers.
         /// <inheritdoc/>
         public override void SetValue(IDbDataParameter parameter, byte[]? value)
         {
@@ -36,7 +39,7 @@ namespace Dapper
                     return ParseHex(hex);
                 default:
                     throw new NotSupportedException(
-                        $"GaussDBHexByteArrayHandler cannot convert {value.GetType().Name}: {value}");
+                        $"GaussDBHexByteArrayHandler cannot convert {value.GetType().Name}.");
             }
         }
 
@@ -49,12 +52,16 @@ namespace Dapper
                 throw new FormatException($"Hex string must have an even number of characters; got {hex.Length}.");
             }
 
+            if (hex.Length == 0) return Array.Empty<byte>();
+
             var result = new byte[hex.Length / 2];
             for (var i = 0; i < result.Length; i++)
             {
+                // AllowHexSpecifier (not HexNumber, which also allows surrounding whitespace) so that a
+                // separator-laden value such as "01 02 03" is rejected instead of silently mis-decoded.
                 result[i] = byte.Parse(
                     hex.Substring(i * 2, 2),
-                    NumberStyles.HexNumber,
+                    NumberStyles.AllowHexSpecifier,
                     CultureInfo.InvariantCulture);
             }
 
