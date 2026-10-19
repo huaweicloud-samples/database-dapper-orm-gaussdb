@@ -1,0 +1,70 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Dapper.Tests.Performance</AssemblyName>
+    <Description>Dapper Core Performance Suite</Description>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net472;net10.0</TargetFrameworks>
+    <IsTestProject>false</IsTestProject>
+    <NoWarn>$(NoWarn);IDE0063;IDE0034;IDE0059;IDE0060</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!--<PackageReference Include="BLToolkit" Version="4.3.6" />-->
+
+    <PackageReference Include="Dashing" />
+    <PackageReference Include="Belgrade.Sql.Client" />
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="DevExpress.Xpo" />
+    <PackageReference Include="EntityFramework" VersionOverride="6.5.2" />
+    <PackageReference Include="linq2db.SqlServer" />
+    <PackageReference Include="MySqlConnector" />
+    <PackageReference Include="NHibernate" />
+    <PackageReference Include="Iesi.Collections" />
+    <PackageReference Include="Mighty" />
+    <PackageReference Include="PetaPoco" />
+    <PackageReference Include="RepoDb.SqlServer" />
+    <PackageReference Include="ServiceStack.OrmLite.SqlServer" />
+    <PackageReference Include="SqlMarshal" />
+    <PackageReference Include="System.Data.SQLite" />
+    <PackageReference Include="System.Reflection.Metadata" />
+    <PackageReference Include="System.Data.SqlClient" />
+    <PackageReference Include="System.Security.Cryptography.Xml" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' != 'net472'">
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <PackageReference Include="Npgsql" VersionOverride="8.0.9"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- NU1903 warnings - pinned for security advisories, not directly used -->
+    <PackageReference Include="System.Text.RegularExpressions" NoWarn="RT0003" />
+    <PackageReference Include="System.Private.Uri" NoWarn="RT0003" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="System.Net.Http" NoWarn="RT0003" />
+    <PackageReference Include="Azure.Identity" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="NHibernate\*.xml" />
+    <Compile Update="Benchmarks.*.cs" DependentUpon="Benchmarks.cs" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net472'">
+    <DefineConstants>$(DefineConstants);NET4X</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <ProjectReference Include="../../Dapper.EntityFramework/Dapper.EntityFramework.csproj" />
+    <PackageReference Include="Microsoft.SqlServer.Types" />
+    <PackageReference Include="Susanoo.SqlServer" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" VersionOverride="[3.1.32]" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Data.Linq" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net472'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Norm.net" />
+  </ItemGroup>
+</Project>

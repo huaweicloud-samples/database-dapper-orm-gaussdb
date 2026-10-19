@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Dapper.EntityFramework</AssemblyName>
+    <Description>Extension handlers for entity framework</Description>
+    <AssemblyTitle>Dapper entity framework type handlers</AssemblyTitle>
+    <VersionPrefix>1.50.2</VersionPrefix>
+    <Authors>Marc Gravell;Nick Craver</Authors>
+    <TargetFrameworks>net461</TargetFrameworks>
+    <PackageTags>orm;sql;micro-orm</PackageTags>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Dapper\Dapper.csproj" />
+    <PackageReference Include="EntityFramework" />
+    <PackageReference Include="Microsoft.SqlServer.Types" />
+
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

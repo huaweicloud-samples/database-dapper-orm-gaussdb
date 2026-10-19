@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Dapper.SqlBuilder</AssemblyName>
+    <PackageTags>orm;sql;micro-orm;query;sql-builder</PackageTags>
+    <Title>Dapper SqlBuilder component</Title>
+    <Description>The Dapper SqlBuilder component, for building SQL queries dynamically.</Description>
+    <Authors>Sam Saffron, Johan Danforth</Authors>
+    <TargetFrameworks>net461;netstandard2.0;net8.0</TargetFrameworks>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Dapper\Dapper.csproj" />
+
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <!-- Required for dynamic support; RT0003 false positive due to GenerateDocumentationFile=false -->
+    <PackageReference Include="Microsoft.CSharp" NoWarn="RT0003" />
+  </ItemGroup>
+  <ItemGroup Condition=" '$(TargetFramework)' == 'net461' ">
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+</Project>

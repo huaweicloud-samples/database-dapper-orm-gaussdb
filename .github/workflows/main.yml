@@ -1,0 +1,138 @@
+name: Main Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+    - main
+    # paths-ignore, not paths: a `paths` list of '*' matches only root-level files, because
+    # GitHub's `*` does not cross a '/'. That silently skipped main builds for every push that
+    # touched only Dapper/, tests/ and so on - which is most of them
+    paths-ignore:
+    - 'docs/**' # don't run when only the docs site changed
+
+jobs:
+  vm-job:
+    name: Ubuntu
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres
+        ports:
+        - 5432/tcp
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        ports:
+        - 1433/tcp
+        env:
+          ACCEPT_EULA: Y
+          SA_PASSWORD: "Password."
+      mysql:
+        image: mysql
+        ports:
+        - 3306/tcp
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: test
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # depth is needed for nbgv
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+    # SDK 11 is installed pre-emptively and, because global.json says rollForward:latestMajor,
+    # it is the SDK that actually builds. Breakage from a new major toolchain then shows up on
+    # an ordinary PR rather than when a release is being cut. Target frameworks are untouched:
+    # this is about what compiles the code, not what the code runs on.
+    - name: Setup dotnet (SDK 11 preview)
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '11.0.x'
+        dotnet-quality: 'preview'
+    - uses: dotnet/nbgv@master
+      with:
+        setAllVars: true
+    # deliberately before build, so the version stays legible even when a later step fails.
+    # Cutting a release means tagging with exactly what a *main* run prints - a PR run builds
+    # refs/pull/N/merge, whose height includes the branch commits and the merge, so its number
+    # is not the one that will ship
+    - name: Report computed version
+      run: |
+        version=$(nbgv get-version --variable NuGetPackageVersion)
+        echo "### Computed package version: \`$version\`" >> "$GITHUB_STEP_SUMMARY"
+        if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+          echo "Tag the release with exactly this." >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "_This is a \`$GITHUB_REF\` build - **not** the version that would ship. Read the release version off a main run._" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        echo "Computed package version: $version (ref: $GITHUB_REF)"
+    - name: .NET Build
+      run: dotnet build Build.csproj -c Release /p:CI=true
+    - name: Dapper Tests
+      run: dotnet test tests/Dapper.Tests/Dapper.Tests.csproj -c Release --logger GitHubActions -p:CI=true -p:TestTfmsInParallel=false
+      env:
+        MySqlConnectionString: Server=localhost;Port=${{ job.services.mysql.ports[3306] }};Uid=root;Pwd=root;Database=test;Allow User Variables=true
+        OLEDBConnectionString: Provider=SQLOLEDB;Server=tcp:localhost,${{ job.services.sqlserver.ports[1433] }};Database=tempdb;User Id=sa;Password=Password.;
+        PostgesConnectionString: Server=localhost;Port=${{ job.services.postgres.ports[5432] }};Database=test;User Id=postgres;Password=postgres;
+        SqlServerConnectionString: Server=tcp:localhost,${{ job.services.sqlserver.ports[1433] }};Database=tempdb;User Id=sa;Password=Password.;
+    # proves the packages still build; release.yml is what actually pushes them
+    - name: .NET Lib Pack
+      run: dotnet pack Build.csproj --no-build -c Release -p:PackageOutputPath="$GITHUB_WORKSPACE/.nupkgs" -p:CI=true
+
+  # The net4x test legs are switched off outside Windows - tests/Directory.Build.targets sets
+  # IsTestProject=false for them - so the Ubuntu job above never runs net481, and net481 is the
+  # only TFM that compiles the ENTITY_FRAMEWORK, LINQ2SQL and OLEDB code paths. This job exists
+  # solely to run that leg; until now it only ever ran on AppVeyor.
+  #
+  # GitHub's Windows images ship no SQL Server engine (only the OLEDB drivers), hence the install
+  # step. MySQL and PostgreSQL are deliberately *not* provisioned here: those tests self-skip when
+  # the server is unreachable (FactMySqlAttribute / FactPostgresqlAttribute probe it in a static
+  # constructor), and the Ubuntu job already covers both against real servers.
+  windows-job:
+    name: Windows (net481)
+    runs-on: windows-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # depth is needed for nbgv
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+    - name: Setup dotnet (SDK 11 preview)
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '11.0.x'
+        dotnet-quality: 'preview'
+    # deliberately unpinned. Pinning sqlserver-version: '2019' - to match AppVeyor and the Ubuntu
+    # job's container - hung this step for 28 minutes before the run was cancelled, where the
+    # action's default installs in under three: SQL Server 2019 predates the Windows Server 2025
+    # runner image. So the net481 leg runs against a newer engine than AppVeyor used; the OLEDB
+    # tests are the ones to watch, since they go through the legacy SQLOLEDB provider.
+    - name: Install SQL Server
+      uses: ankane/setup-sqlserver@v1
+      with:
+        accept-eula: true
+    # the install leaves TCP/IP disabled, as a Windows SQL Server install does by default, so
+    # nothing is listening on 1433; these connect to the local default instance over shared
+    # memory instead. Fails fast and legibly here rather than as several hundred identical
+    # "connection refused" test failures
+    - name: Verify SQL Server is reachable
+      run: sqlcmd -S . -U sa -P 'YourStrong!Passw0rd' -Q "select @@version"
+    - name: .NET Build
+      run: dotnet build Build.csproj -c Release /p:CI=true
+    - name: Dapper Tests (net481)
+      run: dotnet test tests/Dapper.Tests/Dapper.Tests.csproj -c Release -f net481 --no-build --logger GitHubActions -p:CI=true
+      env:
+        OLEDBConnectionString: Provider=SQLOLEDB;Data Source=.;Initial Catalog=tempdb;User Id=sa;Password=YourStrong!Passw0rd;
+        SqlServerConnectionString: Server=.;Database=tempdb;User Id=sa;Password=YourStrong!Passw0rd;
