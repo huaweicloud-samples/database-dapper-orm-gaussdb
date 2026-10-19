@@ -25,6 +25,21 @@ namespace Dapper
             "dd-MMM-yyyy HH:mm:ss",
         };
 
+        private static readonly CultureInfo OracleDateCulture = CreateOracleDateCulture();
+
+        // Oracle RR semantics: 00-49 -> 20xx, 50-99 -> 19xx.
+        // The window is pinned explicitly rather than relying on the culture's default TwoDigitYearMax,
+        // which is globalization data (NLS on .NET Framework, ICU on .NET Core) and not a documented
+        // contract; a 2029 window would silently map 30-49 to 19xx.
+        private static CultureInfo CreateOracleDateCulture()
+        {
+            var culture = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+            var calendar = new GregorianCalendar();
+            calendar.TwoDigitYearMax = 2049;
+            culture.DateTimeFormat.Calendar = calendar;
+            return culture;
+        }
+
         /// <inheritdoc/>
         public override void SetValue(IDbDataParameter parameter, DateTime value)
         {
@@ -66,14 +81,14 @@ namespace Dapper
             if (DateTime.TryParseExact(
                     text,
                     TextFormats,
-                    CultureInfo.InvariantCulture,
+                    OracleDateCulture,
                     DateTimeStyles.None,
                     out var exact))
             {
                 return exact;
             }
 
-            return DateTime.Parse(text, CultureInfo.InvariantCulture);
+            return DateTime.Parse(text, OracleDateCulture);
         }
     }
 }

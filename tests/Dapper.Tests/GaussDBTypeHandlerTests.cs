@@ -124,5 +124,42 @@ namespace Dapper.Tests
             var handler = new GaussDBDateHandler();
             Assert.Throws<NotSupportedException>(() => handler.Parse("0044-03-15 00:00:00 BC"));
         }
+
+        [Fact]
+        public void DateHandlerUsesOracleRrYearSemantics()
+        {
+            var handler = new GaussDBDateHandler();
+            // RR: 00-49 -> 20xx, 50-99 -> 19xx
+            Assert.Equal(new DateTime(2035, 10, 17), handler.Parse("17-OCT-35"));
+            Assert.Equal(new DateTime(1995, 10, 17), handler.Parse("17-OCT-95"));
+            Assert.Equal(new DateTime(2049, 1, 1), handler.Parse("01-JAN-49"));
+            Assert.Equal(new DateTime(1950, 1, 1), handler.Parse("01-JAN-50"));
+        }
+
+        [Fact]
+        public void DateHandlerParsesNullAndDbNull()
+        {
+            var handler = new GaussDBDateHandler();
+            Assert.Equal(default, handler.Parse(null));
+            Assert.Equal(default, handler.Parse(DBNull.Value));
+        }
+
+        [Fact]
+        public void DateHandlerRejectsUnsupportedType()
+        {
+            var handler = new GaussDBDateHandler();
+            Assert.Throws<NotSupportedException>(() => handler.Parse(5));
+        }
+
+        [Fact]
+        public void DateHandlerSetValueContractWritesDateTime()
+        {
+            var handler = new GaussDBDateHandler();
+            using var cmd = new Microsoft.Data.SqlClient.SqlCommand();
+            var p = cmd.CreateParameter();
+            var dt = new DateTime(2026, 10, 17);
+            handler.SetValue(p, dt);
+            Assert.Equal(dt, p.Value);
+        }
     }
 }
