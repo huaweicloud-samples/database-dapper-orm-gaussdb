@@ -3,11 +3,15 @@ using Xunit;
 
 namespace Dapper.Tests
 {
-    // GaussDBSetup.Initialize registers type handlers on the process-wide SqlMapper state,
-    // so this class must not run alongside other tests that touch that state.
+    // These tests register handlers on the process-wide SqlMapper state and restore it in Dispose.
+    // Test parallelization is disabled assembly-wide (see ParameterTests.cs), so the collection marker
+    // is defensive only; the state cleanup in Dispose is what actually keeps unrelated tests safe.
     [Collection(NonParallelDefinition.Name)]
-    public class GaussDBTypeHandlerTests
+    public class GaussDBTypeHandlerTests : IDisposable
     {
+        // Dapper exposes no per-handler removal, so restoring the built-in table is the only way back.
+        public void Dispose() => SqlMapper.ResetTypeHandlers();
+
         [Fact]
         public void HexHandlerParsesHexString()
         {
@@ -168,6 +172,9 @@ namespace Dapper.Tests
         [Fact]
         public void SetupRegistersHandlers()
         {
+            SqlMapper.ResetTypeHandlers();
+            Assert.False(SqlMapper.HasTypeHandler(typeof(byte[])), "前置条件：重置后不应有自定义 handler");
+
             GaussDBSetup.Initialize();
 
             Assert.True(SqlMapper.HasTypeHandler(typeof(byte[])), "byte[] handler 应已注册");
@@ -191,7 +198,29 @@ namespace Dapper.Tests
             Assert.False(SqlMapper.HasTypeHandler(typeof(byte[])), "ResetTypeHandlers 应清空自定义 handler");
 
             GaussDBSetup.Initialize();
-            Assert.True(SqlMapper.HasTypeHandler(typeof(byte[])), "再次 Initialize 应能恢复注册");
+            Assert.True(SqlMapper.HasTypeHandler(typeof(byte[])), "再次 Initialize 应能恢复 byte[] 注册");
+            Assert.True(SqlMapper.HasTypeHandler(typeof(DateTime)), "再次 Initialize 应能恢复 DateTime 注册");
         }
+
+        [Fact]
+        public void SetupRegistersDateHandlerEvenIfByteArrayHandlerPreExists()
+        {
+            SqlMapper.ResetTypeHandlers();
+            SqlMapper.AddTypeHandler(new GaussDBHexByteArrayHandler()); // 模拟用户自有 handler
+            GaussDBSetup.Initialize();
+
+            Assert.True(SqlMapper.HasTypeHandler(typeof(DateTime)), "不应因 byte[] 已注册而漏注册 DateTime");
+        }
+
+#if NET6_0_OR_GREATER
+        [Fact]
+        public void DateHandlerAcceptsBoxedDateOnly()
+        {
+            // Npgsql 10 boxes DateOnly for date columns; the process-wide DateTime handler must not turn
+            // a box Dapper can otherwise convert into an exception. Mirrors SqlMapper.TryConvertDateTimeFamily.
+            var handler = new GaussDBDateHandler();
+            Assert.Equal(new DateTime(2026, 10, 17), handler.Parse(new DateOnly(2026, 10, 17)));
+        }
+#endif
     }
 }

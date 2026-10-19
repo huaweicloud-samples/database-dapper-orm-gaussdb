@@ -1,3 +1,5 @@
+using System;
+
 namespace Dapper
 {
     /// <summary>
@@ -15,6 +17,11 @@ namespace Dapper
     /// If <see cref="SqlMapper.ResetTypeHandlers()"/> has been called, calling <see cref="Initialize"/>
     /// again re-registers the handlers.
     /// </para>
+    /// <para>
+    /// If registration cannot be guaranteed to happen before any query, call
+    /// <see cref="SqlMapper.PurgeQueryCache"/> after <see cref="Initialize"/> to force the cached
+    /// deserializers to be resolved again.
+    /// </para>
     /// </remarks>
     public static class GaussDBSetup
     {
@@ -25,14 +32,17 @@ namespace Dapper
         {
             // Checks actual registration state rather than a latched flag: SqlMapper.ResetTypeHandlers()
             // rebuilds the handler table and would otherwise leave the handlers permanently unregistered,
-            // because a latched flag cannot be re-entered.
-            if (SqlMapper.HasTypeHandler(typeof(byte[])))
+            // because a latched flag cannot be re-entered. Each handler is checked independently so that a
+            // pre-existing user handler for one type cannot suppress registration of the other.
+            if (!SqlMapper.HasTypeHandler(typeof(byte[])))
             {
-                return;
+                SqlMapper.AddTypeHandler(new GaussDBHexByteArrayHandler());
             }
 
-            SqlMapper.AddTypeHandler(new GaussDBHexByteArrayHandler());
-            SqlMapper.AddTypeHandler(new GaussDBDateHandler());
+            if (!SqlMapper.HasTypeHandler(typeof(DateTime)))
+            {
+                SqlMapper.AddTypeHandler(new GaussDBDateHandler());
+            }
         }
     }
 }

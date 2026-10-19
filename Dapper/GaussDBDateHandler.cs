@@ -12,6 +12,11 @@ namespace Dapper
     /// without a cast throws <see cref="NotSupportedException"/>. Query it with <c>::timestamp</c>
     /// (which Dapper maps natively, no handler required) or <c>::text</c>, which yields either
     /// <c>'17-OCT-26'</c> or <c>'2026-10-17 00:00:00 AD'</c>. This handler parses both spellings.
+    /// <para>
+    /// Because registration is process-wide for <see cref="DateTime"/>, the handler also accepts the
+    /// boxes other providers produce for date columns: a boxed <c>DateOnly</c> is converted the same way
+    /// Dapper's built-in date-family conversion would.
+    /// </para>
     /// </remarks>
     public sealed class GaussDBDateHandler : SqlMapper.TypeHandler<DateTime>
     {
@@ -57,6 +62,14 @@ namespace Dapper
                     return default;
                 case DateTime dt:
                     return dt;
+#if NET6_0_OR_GREATER
+                // This handler is registered process-wide for DateTime, so it also sees boxes produced by
+                // other providers: Npgsql 10 boxes DateOnly for date columns. Mirror the date-family rule
+                // in SqlMapper.TryConvertDateTimeFamily, so that a box Dapper could otherwise convert is
+                // not turned into an exception merely because this handler is registered.
+                case DateOnly dateOnly:
+                    return dateOnly.ToDateTime(default);
+#endif
                 case string text:
                     return ParseText(text);
                 default:
