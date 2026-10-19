@@ -88,5 +88,41 @@ namespace Dapper.Tests
             handler.SetValue(p, null);
             Assert.Equal(DBNull.Value, p.Value);
         }
+
+        [Fact]
+        public void DateHandlerParsesOracleStyleText()
+        {
+            var handler = new GaussDBDateHandler();
+            Assert.Equal(new DateTime(2026, 10, 17), handler.Parse("17-OCT-26"));
+        }
+
+        [Fact]
+        public void DateHandlerParsesTextWithAdEraSuffix()
+        {
+            var handler = new GaussDBDateHandler();
+            Assert.Equal(new DateTime(2026, 10, 17), handler.Parse("2026-10-17 00:00:00 AD"));
+        }
+
+        [Fact]
+        public void DateHandlerParsesIsoText()
+        {
+            var handler = new GaussDBDateHandler();
+            Assert.Equal(new DateTime(2026, 10, 17, 12, 34, 56), handler.Parse("2026-10-17 12:34:56"));
+        }
+
+        [Fact]
+        public void DateHandlerPassesThroughDateTime()
+        {
+            var handler = new GaussDBDateHandler();
+            var dt = new DateTime(2026, 1, 2, 3, 4, 5);
+            Assert.Equal(dt, handler.Parse(dt));
+        }
+
+        [Fact]
+        public void DateHandlerRejectsBcEra()
+        {
+            var handler = new GaussDBDateHandler();
+            Assert.Throws<NotSupportedException>(() => handler.Parse("0044-03-15 00:00:00 BC"));
+        }
     }
 }

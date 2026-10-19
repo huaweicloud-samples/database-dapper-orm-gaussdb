@@ -6,3 +6,7 @@ Dapper.GaussDBHexByteArrayHandler
 Dapper.GaussDBHexByteArrayHandler.GaussDBHexByteArrayHandler() -> void
 override Dapper.GaussDBHexByteArrayHandler.Parse(object? value) -> byte[]?
 override Dapper.GaussDBHexByteArrayHandler.SetValue(System.Data.IDbDataParameter! parameter, byte[]? value) -> void
+Dapper.GaussDBDateHandler
+Dapper.GaussDBDateHandler.GaussDBDateHandler() -> void
+override Dapper.GaussDBDateHandler.Parse(object? value) -> System.DateTime
+override Dapper.GaussDBDateHandler.SetValue(System.Data.IDbDataParameter! parameter, System.DateTime value) -> void
