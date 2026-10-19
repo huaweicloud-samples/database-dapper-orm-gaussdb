@@ -516,10 +516,9 @@ namespace Dapper.Tests
             var dateTimeHandler = new RecordingTypeHandler<DateTime>();
             SqlMapper.AddTypeHandler(dateTimeHandler);
 
-            connection.Execute("CREATE TABLE #Test_RemoveTypeMap (x datetime NOT NULL);");
-
             try
             {
+                connection.Execute("CREATE TABLE #Test_RemoveTypeMap (x datetime NOT NULL);");
                 connection.Execute("INSERT INTO #Test_RemoveTypeMap VALUES (@Now)", new { DateTime.Now });
                 connection.Query<DateTime>("SELECT * FROM #Test_RemoveTypeMap");
 
@@ -528,8 +527,10 @@ namespace Dapper.Tests
             }
             finally
             {
-                connection.Execute("DROP TABLE #Test_RemoveTypeMap");
+                // restore the process-global type map before the DROP: the DROP throws when no SQL Server
+                // is reachable, and a throwing statement in a finally skips the rest of that finally
                 SqlMapper.AddTypeMap(typeof(DateTime), DbType.DateTime); // or an option to reset type map?
+                connection.Execute("DROP TABLE #Test_RemoveTypeMap");
             }
         }
 
