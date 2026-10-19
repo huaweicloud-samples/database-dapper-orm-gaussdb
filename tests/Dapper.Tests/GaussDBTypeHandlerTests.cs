@@ -182,5 +182,16 @@ namespace Dapper.Tests
 
             Assert.True(SqlMapper.HasTypeHandler(typeof(byte[])));
         }
+
+        [Fact]
+        public void SetupRecoversAfterResetTypeHandlers()
+        {
+            GaussDBSetup.Initialize();
+            SqlMapper.ResetTypeHandlers();
+            Assert.False(SqlMapper.HasTypeHandler(typeof(byte[])), "ResetTypeHandlers 应清空自定义 handler");
+
+            GaussDBSetup.Initialize();
+            Assert.True(SqlMapper.HasTypeHandler(typeof(byte[])), "再次 Initialize 应能恢复注册");
+        }
     }
 }

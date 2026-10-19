@@ -1,5 +1,3 @@
-using System.Threading;
-
 namespace Dapper
 {
     /// <summary>
@@ -13,17 +11,22 @@ namespace Dapper
     /// does not purge Dapper's query cache, so queries whose SQL text was already cached keep using the
     /// previously resolved deserializer.
     /// </para>
+    /// <para>
+    /// If <see cref="SqlMapper.ResetTypeHandlers()"/> has been called, calling <see cref="Initialize"/>
+    /// again re-registers the handlers.
+    /// </para>
     /// </remarks>
     public static class GaussDBSetup
     {
-        private static int initialized;
-
         /// <summary>
         /// Registers the GaussDB type handlers. Safe to call multiple times and from multiple threads.
         /// </summary>
         public static void Initialize()
         {
-            if (Interlocked.Exchange(ref initialized, 1) == 1)
+            // Checks actual registration state rather than a latched flag: SqlMapper.ResetTypeHandlers()
+            // rebuilds the handler table and would otherwise leave the handlers permanently unregistered,
+            // because a latched flag cannot be re-entered.
+            if (SqlMapper.HasTypeHandler(typeof(byte[])))
             {
                 return;
             }
