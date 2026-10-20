@@ -41,6 +41,17 @@ namespace Dapper.Tests
         }
 
         /// <summary>
+        /// The "correct shape" for a bigserial key: the entity's Id is long. Rainbow's Insert still
+        /// resolves the returning key through a hardcoded <c>Query&lt;int?&gt;</c>, so this entity pins
+        /// that the int32 boundary applies on the insert side regardless of the declared key type.
+        /// </summary>
+        private sealed class GdbT3bLongRow
+        {
+            public long Id { get; set; }
+            public string? Name { get; set; }
+        }
+
+        /// <summary>
         /// The fallback branch of <c>DetermineTableName</c> resolves to the bare type name, so this type's
         /// name is also the physical table its test creates (the server folds the unquoted name to lower
         /// case, hence the "gdbt6gadget" DDL below).
@@ -60,6 +71,10 @@ namespace Dapper.Tests
             // A long key type, so the test can name a primary key beyond int32; the entity's Id property is
             // still int, which is where the documented overflow happens.
             public Table<HugeKeyRow, long> GdbT3Bigkeys { get; set; } = null!;
+
+            // Same key family, but the entity's Id is long - the "correct shape" for bigserial. Insert's
+            // hardcoded Query<int?> still bounds it; see InsertReturnKeyBeyondInt32ThrowsDataExceptionEvenWithLongId.
+            public Table<GdbT3bLongRow, long> GdbT3bLongRows { get; set; } = null!;
 
             public Table<GdbT6Gadget> GdbT6Gadgets { get; set; } = null!;
         }
@@ -195,6 +210,38 @@ namespace Dapper.Tests
             finally
             {
                 conn.Execute("drop table if exists gdbt3bigkeys");
+            }
+        }
+
+        [GaussDBTests.FactGaussDB]
+        public void InsertReturnKeyBeyondInt32ThrowsDataExceptionEvenWithLongId()
+        {
+            // Companion to BigSerialPrimaryKeyBeyondInt32ThrowsDataException: Rainbow's Insert resolves the
+            // generated key through a hardcoded Query<int?>, so the int32 boundary holds on the insert side
+            // even when Table<,long> and a long Id property express the key correctly. setval pushes the
+            // bigserial sequence past int32 (an explicit insert does not advance it); the row itself is
+            // inserted - the failure happens when Dapper parses the returning key - and it stays loud
+            // rather than silently truncating the key.
+            using var conn = DatabaseProvider<GaussDBProvider>.Instance.GetOpenConnection();
+            conn.Execute("drop table if exists gdbt3blongrows");
+            conn.Execute("create table gdbt3blongrows (Id bigserial primary key, Name varchar2(60))");
+            try
+            {
+                var db = RainbowDb.Init(conn, 30);
+                Assert.Equal("GdbT3bLongRows", db.GdbT3bLongRows.TableName);
+
+                conn.Execute("select setval(pg_get_serial_sequence('gdbt3blongrows', 'id'), 3000000000)");
+
+                var ex = Assert.Throws<System.Data.DataException>(
+                    () => db.GdbT3bLongRows.Insert(new { Name = "over" }));
+                Assert.IsType<OverflowException>(ex.InnerException);
+
+                // The insert itself succeeded; only the returning key failed to convert.
+                Assert.Equal(1, conn.ExecuteScalar<int>("select count(*)::int from gdbt3blongrows"));
+            }
+            finally
+            {
+                conn.Execute("drop table if exists gdbt3blongrows");
             }
         }
 

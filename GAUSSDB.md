@@ -221,7 +221,9 @@ simple query 通道（`gsql` / psycopg2 / 迁移工具）同语句可成功。�
 - `Insert` 用 `returning Id` 取回主键，内部按 `Query<int?>` 取值（经 `Convert.ChangeType`
   转 `int`，非 IL unbox）：`int4` / `serial` 主键直接可用；`int8`（`bigserial`）/
   `number` 主键在 int32 范围内同样可用，主键值超出 int32 范围时抛
-  `System.Data.DataException`（内层 `System.OverflowException`）。
+  `System.Data.DataException`（内层 `System.OverflowException`）。这个边界只取决于
+  `Insert` 内部的返回键解析——**即使实体 `Id` 声明为 `long` 也一样**；读侧
+  `Table<T, long>.Get` 则可以用 `long` 承接超 int32 的存量主键。
 
 ### 12. 存储过程输出参数
 

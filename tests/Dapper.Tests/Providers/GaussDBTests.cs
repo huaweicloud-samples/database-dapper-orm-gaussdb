@@ -237,6 +237,15 @@ from gaussdb_types_probe where id = 1");
                 "select count(*)::int from (values (1),(2)) t(id) where t.id = any(@ids)",
                 new { ids = Array.Empty<int>() });
             Assert.Equal(0, count);
+
+            // A NULL bind would match no rows too, so the count above cannot tell "bound as an empty
+            // array" from "bound as NULL". cardinality() can: 0 for an empty array, NULL for NULL. The
+            // check goes through "is null" rather than ExecuteScalar<bool>("select cardinality(@ids)"):
+            // Dapper's Parse<T> maps DBNull to default(bool) = false, so a NULL bind would also read as
+            // false and the direct form would pass either way.
+            Assert.False(
+                conn.ExecuteScalar<bool>("select cardinality(@ids) is null", new { ids = Array.Empty<int>() }),
+                "空数组必须绑定为空数组，而不是 NULL");
         }
 
         [FactGaussDB]
