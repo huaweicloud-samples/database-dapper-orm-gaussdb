@@ -316,10 +316,12 @@ namespace Dapper
             return (Action<TDatabase>)dm.CreateDelegate(typeof(Action<TDatabase>));
         }
 
-        private static readonly ConcurrentDictionary<Type, string> tableNameMap = new ConcurrentDictionary<Type, string>();
+        private static readonly ConcurrentDictionary<string, string> tableNameMap = new ConcurrentDictionary<string, string>();
         private string DetermineTableName<T>(string likelyTableName)
         {
-            if (!tableNameMap.TryGetValue(typeof(T), out string name))
+            // cached names are dialect-specific (brackets vs quoted-lower), so include the dialect in the key
+            var cacheKey = (IsGaussDB ? "gaussdb:" : "sqlserver:") + typeof(T).FullName;
+            if (!tableNameMap.TryGetValue(cacheKey, out string name))
             {
                 name = likelyTableName;
                 if (!TableExists(name))
@@ -328,7 +330,7 @@ namespace Dapper
                     name = IsGaussDB ? "\"" + typeof(T).Name + "\"" : "[" + typeof(T).Name + "]";
                 }
 
-                tableNameMap[typeof(T)] = name;
+                tableNameMap[cacheKey] = name;
             }
             return name;
         }
