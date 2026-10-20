@@ -81,9 +81,10 @@ from t where id = @id
 
 ### 3. `date` handler 的 DateStyle 假设
 
-**现象**：`GaussDBDateHandler` 主通道按 Oracle 形态解析：`DD-MON-RR`（如 `17-OCT-26`，
-即 `date::text` 的输出），可选 `AD` / `BC` 纪元后缀，月份大小写不敏感；
-形态不匹配时兜底 `DateTime.Parse`（覆盖驱动直读的 ISO 形态 `2026-10-17 00:00:00`）。
+**现象**：`GaussDBDateHandler` 用 `TryParseExact` 匹配一组显式格式：Oracle 形态
+`DD-MON-RR`（如 `17-OCT-26`，即 `date::text` 的输出）与驱动直读的 ISO 形态
+`2026-10-17 00:00:00`（`TextFormats[0]`）都命中这条主通道；`AD` 纪元后缀可解析、
+`BC` 后缀**主动拒绝**，月份大小写不敏感；全部格式均不匹配时才兜底 `DateTime.Parse`。
 
 **原因**：`::text` 的 `DD-MON-RR` 拼写由服务端格式化产生，解析结果依赖服务端 DateStyle
 的输出默认设定。
@@ -191,9 +192,10 @@ simple query 通道（`gsql` / psycopg2 / 迁移工具）同语句可成功。�
 - 主键列同理：实体需有 `Id` 属性，GaussDB 侧列名须为小写 `id`。
 - 表属性名解析：先探测 `information_schema`（**大小写不敏感**），未命中则回退为
   **裸类型名且不加引号**（加引号会破坏服务端的折叠行为）。
-- `Insert` 用 `returning Id` 取回主键，**主键列必须为 `int4` / `serial`**。
-  若主键是 `int8`（`bigserial`）或 `number`，驱动返回的是 boxed `long` / boxed `decimal`，
-  而 `Insert` 内部按 `Query<int?>` 取值，unbox 时抛 `InvalidCastException`。
+- `Insert` 用 `returning Id` 取回主键，内部按 `Query<int?>` 取值（经 `Convert.ChangeType`
+  转 `int`，非 IL unbox）：`int4` / `serial` 主键直接可用；`int8`（`bigserial`）/
+  `number` 主键在 int32 范围内同样可用，主键值超出 int32 范围时抛
+  `System.Data.DataException`（内层 `System.OverflowException`）。
 
 ### 12. 存储过程输出参数
 
