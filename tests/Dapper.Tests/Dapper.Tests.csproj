@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="../../Dapper.ProviderTools/Dapper.ProviderTools.csproj" />
     <ProjectReference Include="../../Dapper.SqlBuilder/Dapper.SqlBuilder.csproj" />
+    <ProjectReference Include="../../Dapper.Rainbow/Dapper.Rainbow.csproj" />
     <PackageReference Include="FastMember" />
     <PackageReference Include="FirebirdSql.Data.FirebirdClient" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
