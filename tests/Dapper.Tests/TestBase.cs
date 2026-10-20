@@ -2,6 +2,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Xunit;
 
@@ -107,7 +108,9 @@ namespace Dapper.Tests
         {
             Console.WriteLine("Dapper: " + typeof(SqlMapper).AssemblyQualifiedName);
             var provider = DatabaseProvider<TProvider>.Instance;
-            Console.WriteLine("Using Connectionstring: {0}", provider.GetConnectionString());
+            // the connection string can carry a real password (e.g. from an environment variable),
+            // so mask it before it reaches test output and .trx artifacts
+            Console.WriteLine("Using Connectionstring: {0}", Regex.Replace(provider.GetConnectionString(), "(?i)(password|pwd)=[^;]*", "$1=***"));
             var factory = provider.Factory;
             Console.WriteLine("Using Provider: {0}", factory.GetType().FullName);
             Console.WriteLine(".NET: " + Environment.Version);
