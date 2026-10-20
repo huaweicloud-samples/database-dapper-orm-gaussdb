@@ -63,7 +63,9 @@ namespace Dapper
 
                 string cols = string.Join(",", paramNames);
                 string colsParams = string.Join(",", paramNames.Select(p => "@" + p));
-                var sql = "set nocount on insert " + TableName + " (" + cols + ") values (" + colsParams + ") select cast(scope_identity() as int)";
+                var sql = database.IsGaussDB
+                    ? "insert into " + TableName + " (" + cols + ") values (" + colsParams + ") returning Id"
+                    : "set nocount on insert " + TableName + " (" + cols + ") values (" + colsParams + ") select cast(scope_identity() as int)";
 
                 return database.Query<int?>(sql, o).Single();
             }
@@ -115,7 +117,9 @@ namespace Dapper
             /// <returns>Data from the first table row.</returns>
             public virtual T First()
             {
-                return database.QueryFirstOrDefault<T>("select top 1 * from " + TableName);
+                return database.QueryFirstOrDefault<T>(database.IsGaussDB
+                    ? "select * from " + TableName + " limit 1"
+                    : "select top 1 * from " + TableName);
             }
 
             /// <summary>
@@ -175,6 +179,13 @@ namespace Dapper
 
         private DbConnection _connection;
         private int _commandTimeout;
+
+        /// <summary>
+        /// True when the underlying connection targets GaussDB (A-compatibility mode), which needs
+        /// different CRUD SQL than SQL Server (no scope_identity/top/bracket identifiers).
+        /// </summary>
+        internal bool IsGaussDB =>
+            string.Equals(_connection?.GetType().Name, "GaussDBConnection", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// Get access to the underlying transaction
@@ -313,7 +324,8 @@ namespace Dapper
                 name = likelyTableName;
                 if (!TableExists(name))
                 {
-                    name = "[" + typeof(T).Name + "]";
+                    // GaussDB folds unquoted identifiers to lower case; SQL Server needs brackets.
+                    name = IsGaussDB ? "\"" + typeof(T).Name + "\"" : "[" + typeof(T).Name + "]";
                 }
 
                 tableNameMap[typeof(T)] = name;
@@ -325,8 +337,7 @@ namespace Dapper
         {
             string schemaName = null;
 
-            name = name.Replace("[", "");
-            name = name.Replace("]", "");
+            name = name.Replace("[", "").Replace("]", "").Replace("\"", "");
 
             if (name.IndexOf('.') > 0)
             {
@@ -338,9 +349,12 @@ namespace Dapper
                 }
             }
 
+            // GaussDB stores unquoted identifiers lower-cased, so match case-insensitively there.
+            var namePredicate = IsGaussDB ? "lower(TABLE_NAME) = lower(@name)" : "TABLE_NAME = @name";
+
             var builder = new StringBuilder("select 1 from INFORMATION_SCHEMA.TABLES where ");
             if (!string.IsNullOrEmpty(schemaName)) builder.Append("TABLE_SCHEMA = @schemaName AND ");
-            builder.Append("TABLE_NAME = @name");
+            builder.Append(namePredicate);
 
             return _connection.Query(builder.ToString(), new { schemaName, name }, Transaction).Count() == 1;
         }

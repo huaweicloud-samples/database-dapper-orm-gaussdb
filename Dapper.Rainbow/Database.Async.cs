@@ -24,7 +24,9 @@ namespace Dapper
 
                 string cols = string.Join(",", paramNames);
                 string colsParams = string.Join(",", paramNames.Select(p => "@" + p));
-                var sql = "set nocount on insert " + TableName + " (" + cols + ") values (" + colsParams + ") select cast(scope_identity() as int)";
+                var sql = database.IsGaussDB
+                    ? "insert into " + TableName + " (" + cols + ") values (" + colsParams + ") returning Id"
+                    : "set nocount on insert " + TableName + " (" + cols + ") values (" + colsParams + ") select cast(scope_identity() as int)";
 
                 return (await database.QueryAsync<int?>(sql, o).ConfigureAwait(false)).Single();
             }
@@ -71,7 +73,9 @@ namespace Dapper
             /// </summary>
             /// <returns>Data from the first table row.</returns>
             public virtual Task<T> FirstAsync() =>
-                database.QueryFirstOrDefaultAsync<T>("select top 1 * from " + TableName);
+                database.QueryFirstOrDefaultAsync<T>(database.IsGaussDB
+                    ? "select * from " + TableName + " limit 1"
+                    : "select top 1 * from " + TableName);
 
             /// <summary>
             /// Asynchronously gets the all rows from this table.
