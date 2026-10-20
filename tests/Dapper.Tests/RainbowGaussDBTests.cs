@@ -1,4 +1,5 @@
 #if NET8_0_OR_GREATER
+using System;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -9,7 +10,7 @@ namespace Dapper.Tests
     /// CRUD spelling, and both table-name resolution paths <c>DetermineTableName</c> can take there.
     /// </summary>
     /// <remarks>
-    /// The two tests deliberately use different entity types. <c>tableNameMap</c> is a process-wide
+    /// Each test deliberately uses its own entity type. <c>tableNameMap</c> is a process-wide
     /// static keyed by entity type, so resolving one entity against two differently named tables
     /// would let the first test's resolved name leak into the second.
     /// </remarks>
@@ -27,10 +28,40 @@ namespace Dapper.Tests
             public string? Name { get; set; }
         }
 
+        private sealed class BigSerialRow
+        {
+            public int Id { get; set; }
+            public string? Name { get; set; }
+        }
+
+        private sealed class HugeKeyRow
+        {
+            public int Id { get; set; }
+            public string? Name { get; set; }
+        }
+
+        /// <summary>
+        /// The fallback branch of <c>DetermineTableName</c> resolves to the bare type name, so this type's
+        /// name is also the physical table its test creates (the server folds the unquoted name to lower
+        /// case, hence the "gdbt6gadget" DDL below).
+        /// </summary>
+        private sealed class GdbT6Gadget
+        {
+            public int Id { get; set; }
+            public string? Name { get; set; }
+        }
+
         private sealed class RainbowDb : Database<RainbowDb>
         {
             public Table<Widget> Widgets { get; set; } = null!;
             public Table<Gizmo> Gizmos { get; set; } = null!;
+            public Table<BigSerialRow> GdbT2Bigserials { get; set; } = null!;
+
+            // A long key type, so the test can name a primary key beyond int32; the entity's Id property is
+            // still int, which is where the documented overflow happens.
+            public Table<HugeKeyRow, long> GdbT3Bigkeys { get; set; } = null!;
+
+            public Table<GdbT6Gadget> GdbT6Gadgets { get; set; } = null!;
         }
 
         [GaussDBTests.FactGaussDB]
@@ -112,6 +143,88 @@ namespace Dapper.Tests
             finally
             {
                 conn.Execute("drop table if exists gizmos");
+            }
+        }
+
+        [GaussDBTests.FactGaussDB]
+        public void BigSerialPrimaryKeyRoundTrip()
+        {
+            // verification-results.md §十二: the driver boxes an int8 primary key as Int64 and Rainbow's
+            // Query<int?> converts it (Convert.ChangeType, not an IL unbox), so a bigserial key inside the
+            // int32 range round-trips through Insert/Get just like a serial one.
+            using var conn = DatabaseProvider<GaussDBProvider>.Instance.GetOpenConnection();
+            conn.Execute("drop table if exists gdbt2bigserials");
+            conn.Execute("create table gdbt2bigserials (Id bigserial primary key, Name varchar2(60))");
+            try
+            {
+                var db = RainbowDb.Init(conn, 30);
+                Assert.Equal("GdbT2Bigserials", db.GdbT2Bigserials.TableName);
+
+                int? id = db.GdbT2Bigserials.Insert(new { Name = "big" });
+                Assert.True(id > 0);
+
+                var fetched = db.GdbT2Bigserials.Get(id!.Value);
+                Assert.NotNull(fetched);
+                Assert.Equal(id.Value, fetched.Id);
+                Assert.Equal("big", fetched.Name);
+            }
+            finally
+            {
+                conn.Execute("drop table if exists gdbt2bigserials");
+            }
+        }
+
+        [GaussDBTests.FactGaussDB]
+        public void BigSerialPrimaryKeyBeyondInt32ThrowsDataException()
+        {
+            // GAUSSDB.md §11 「Rainbow 的边界」: an int8 primary key is usable only while it fits in int32.
+            // Past that the failure is loud - DataException wrapping OverflowException - never a silently
+            // truncated key. The key is named through Table<,long>.Get so the value itself can be expressed;
+            // the entity's Id is still int, which is where the conversion overflows.
+            using var conn = DatabaseProvider<GaussDBProvider>.Instance.GetOpenConnection();
+            conn.Execute("drop table if exists gdbt3bigkeys");
+            conn.Execute("create table gdbt3bigkeys (Id bigserial primary key, Name varchar2(60))");
+            try
+            {
+                conn.Execute("insert into gdbt3bigkeys (Id, Name) values (3000000000, 'huge')");
+                var db = RainbowDb.Init(conn, 30);
+
+                var ex = Assert.Throws<System.Data.DataException>(() => db.GdbT3Bigkeys.Get(3000000000L));
+                Assert.IsType<OverflowException>(ex.InnerException);
+            }
+            finally
+            {
+                conn.Execute("drop table if exists gdbt3bigkeys");
+            }
+        }
+
+        [GaussDBTests.FactGaussDB]
+        public void TableNameResolvedBeforeTableExistsStaysUsable()
+        {
+            // Task 7 scenario C / Task 8 M3: the resolved name is cached process-wide, so a resolution that
+            // happens before the table exists must still hand back a name the table can be created under.
+            // The probe misses (no such table yet) and the fallback is the bare type name - unquoted, so the
+            // server folds it to lower case and "GdbT6Gadget" addresses the "gdbt6gadget" table created
+            // afterwards. A cached name that did not survive that order would break every later CRUD call.
+            using var conn = DatabaseProvider<GaussDBProvider>.Instance.GetOpenConnection();
+            conn.Execute("drop table if exists gdbt6gadget");
+            try
+            {
+                var db = RainbowDb.Init(conn, 30);
+                Assert.Equal("GdbT6Gadget", db.GdbT6Gadgets.TableName);
+
+                conn.Execute("create table gdbt6gadget (Id serial primary key, Name varchar2(60))");
+
+                int? id = db.GdbT6Gadgets.Insert(new { Name = "late" });
+                Assert.True(id > 0);
+
+                var fetched = db.GdbT6Gadgets.Get(id!.Value);
+                Assert.NotNull(fetched);
+                Assert.Equal("late", fetched.Name);
+            }
+            finally
+            {
+                conn.Execute("drop table if exists gdbt6gadget");
             }
         }
     }

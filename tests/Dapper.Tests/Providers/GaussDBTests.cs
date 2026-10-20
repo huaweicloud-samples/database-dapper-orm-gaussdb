@@ -199,6 +199,90 @@ from gaussdb_types_probe where id = 1");
             }
         }
 
+        [FactGaussDB]
+        public void ExecuteInRolledBackTransactionLeavesNoRow()
+        {
+            // The driver spike pinned "transaction insert + rollback" for GaussDB (probe §八); this is the
+            // regression test that keeps it pinned.
+            using var conn = Provider.GetOpenConnection();
+            conn.Execute("drop table if exists gdb_t4_tran");
+            conn.Execute("create table gdb_t4_tran (id int, v varchar2(20))");
+            try
+            {
+                using (var tran = conn.BeginTransaction())
+                {
+                    conn.Execute("insert into gdb_t4_tran (id, v) values (1, @v)", new { v = "x" }, tran);
+                    // visible inside the transaction...
+                    Assert.Equal(1, conn.ExecuteScalar<int>("select count(*)::int from gdb_t4_tran", null, tran));
+                    tran.Rollback();
+                }
+
+                // ...and gone once it is rolled back.
+                Assert.Equal(0, conn.ExecuteScalar<int>("select count(*)::int from gdb_t4_tran"));
+            }
+            finally
+            {
+                conn.Execute("drop table if exists gdb_t4_tran");
+            }
+        }
+
+        [FactGaussDB]
+        public void EmptyArrayParameterMatchesNothing()
+        {
+            // GaussDB is array-capable, so Dapper binds the whole array as a single parameter and leaves the
+            // SQL text alone (see InListArrayParameterWorks). An empty array has to survive that path as
+            // well: it must bind without error and match no row, not throw and not match everything.
+            using var conn = Provider.GetOpenConnection();
+            var count = conn.ExecuteScalar<int>(
+                "select count(*)::int from (values (1),(2)) t(id) where t.id = any(@ids)",
+                new { ids = Array.Empty<int>() });
+            Assert.Equal(0, count);
+        }
+
+        [FactGaussDB]
+        public void LateHandlerRegistrationRequiresPurgeQueryCache()
+        {
+            // GAUSSDB.md 快速开始: AddTypeHandler does not purge Dapper's query cache, so a SQL text whose
+            // deserializer was already resolved keeps the handler-less one; PurgeQueryCache() forces
+            // re-resolution. The test owns the process-wide handler state: it resets first, so the "before"
+            // step is genuinely handler-less whatever ran earlier, and purges the query cache at the end.
+            //
+            // The raw::text -> byte[] channel is the one that can tell the two deserializers apart: without
+            // the hex handler Dapper's built-in path cannot turn hex text into bytes at all, whereas
+            // c_date::text yields '17-OCT-26', which the handler and Convert.ChangeType both read as the
+            // same DateTime - the date channel would pass either way and pin nothing.
+            SqlMapper.ResetTypeHandlers();
+            Assert.False(SqlMapper.HasTypeHandler(typeof(byte[])), "前置条件：解析前必须没有 byte[] handler");
+
+            using var conn = Provider.GetOpenConnection();
+            conn.Execute("drop table if exists gdb_t7_raw");
+            conn.Execute("create table gdb_t7_raw (id int, v raw(16))");
+            const string sql = "select v::text as v from gdb_t7_raw where id = 1";
+            try
+            {
+                conn.Execute("insert into gdb_t7_raw (id, v) values (1, hextoraw('0102ABCD'))");
+
+                // (1) resolved with no handler registered: hex text cannot be converted to byte[].
+                Assert.Throws<System.Data.DataException>(() => conn.QueryFirst<byte[]>(sql));
+
+                // (2) registering late does not purge the cache, so the same SQL text keeps using the
+                //     deserializer resolved in (1) and fails the same way.
+                GaussDBSetup.Initialize();
+                Assert.True(SqlMapper.HasTypeHandler(typeof(byte[])));
+                Assert.Throws<System.Data.DataException>(() => conn.QueryFirst<byte[]>(sql));
+
+                // (3) purging the cache re-resolves the deserializer, now with the handler in place.
+                SqlMapper.PurgeQueryCache();
+                Assert.Equal(new byte[] { 0x01, 0x02, 0xAB, 0xCD }, conn.QueryFirst<byte[]>(sql));
+            }
+            finally
+            {
+                conn.Execute("drop table if exists gdb_t7_raw");
+                // don't leave a stale deserializer behind in the process-wide cache
+                SqlMapper.PurgeQueryCache();
+            }
+        }
+
         [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
         public class FactGaussDBAttribute : FactAttribute
         {

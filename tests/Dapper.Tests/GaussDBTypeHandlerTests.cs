@@ -252,5 +252,17 @@ namespace Dapper.Tests
             Assert.Equal(new DateTime(2026, 10, 17), handler.Parse(new DateOnly(2026, 10, 17)));
         }
 #endif
+
+        [Fact]
+        public void DateHandlerFallsBackToLenientParseWhenNoExactFormatMatches()
+        {
+            // ParseText tries its six TextFormats with TryParseExact and only then falls back to
+            // DateTime.Parse. "17-OCT-26 12:34" is the server's DD-MON-RR spelling carrying a time without
+            // seconds: every time-bearing TextFormat requires HH:mm:ss, so nothing matches and the value can
+            // only be read through the fallback. Measured on net8.0 (2026-10-20):
+            //   TryParseExact(TextFormats) = False, DateTime.Parse(OracleDateCulture) = True.
+            var handler = new GaussDBDateHandler();
+            Assert.Equal(new DateTime(2026, 10, 17, 12, 34, 0), handler.Parse("17-OCT-26 12:34"));
+        }
     }
 }
