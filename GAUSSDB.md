@@ -281,3 +281,5 @@ select c_number as CNumber, c_date::timestamp as CDate from t
 | `tests/Dapper.Tests/GaussDBTypeHandlerTests.cs` | 新增（两 handler 的单元测试） |
 | `tests/Dapper.Tests/Providers/GaussDBTests.cs` | 新增（真库集成测试 + `FactGaussDB` 跳过守卫） |
 | `tests/Dapper.Tests/RainbowGaussDBTests.cs` | 新增（Rainbow CRUD 与表名探测两路径） |
+| `README.md` | 重写为本发行版说明（上游文档链接 + 本次改动、部署 / 开发 / 测试指引） |
+| `TESTING.md` | 新增（测试环境与连接配置、各 TFM 覆盖、全量基线与零漂移判据、升级回归流程） |
