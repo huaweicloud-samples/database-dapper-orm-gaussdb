@@ -527,9 +527,15 @@ namespace Dapper.Tests
             }
             finally
             {
-                // restore the process-global type map before the DROP: the DROP throws when no SQL Server
-                // is reachable, and a throwing statement in a finally skips the rest of that finally
-                SqlMapper.AddTypeMap(typeof(DateTime), DbType.DateTime); // or an option to reset type map?
+                // restore the process-global state this test mutates, before the DROP: the DROP throws when
+                // no SQL Server is reachable, and a throwing statement in a finally skips the rest of that
+                // finally. AddTypeMap leaves the flag bits clear for a negative DbType, so (DbType)(-2)
+                // rebuilds exactly the built-in "DoNotSet" entry the static initializer installs for
+                // DateTime - restoring the default, unlike the DbType.DateTime that would be forced onto
+                // every later DateTime parameter. There is no per-handler removal, so rebuilding the
+                // built-in handler table is the only way to drop the RecordingTypeHandler added above.
+                SqlMapper.ResetTypeHandlers();
+                SqlMapper.AddTypeMap(typeof(DateTime), (DbType)(-2));
                 connection.Execute("DROP TABLE #Test_RemoveTypeMap");
             }
         }
