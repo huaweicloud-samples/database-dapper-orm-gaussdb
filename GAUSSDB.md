@@ -1,12 +1,30 @@
 # Dapper GaussDB 适配说明
 
 本发行版基于 Dapper 2.1.89 改造，增加华为 GaussDB 507 集中式 / Oracle 兼容模式
-（`DBCOMPATIBILITY = 'A'`）支持。所有约束均来自真库实测（`probe/verification-results.md`），
-未经验证的路径不在本文档范围内。
+（`DBCOMPATIBILITY = 'A'`）支持。全部结论经真库实测定档，未经验证的路径不在本文档范围内。
+
+**读者对象**：使用本发行版的应用开发者；标注（维护者）的条目面向仓库维护者。
+
+## 症状速查
+
+按屏幕上看到的错误码 / 异常反查对应约束：
+
+| 症状（错误码 / 异常） | 节号 |
+|---|---|
+| `InvalidCastException` + `DataTypeName 'datea'` / `'raw'` / `'blob'` / `'clob'` | §1 列必须显式 cast |
+| `InvalidCastException` + `Out of range of DateTime` | §2 BC 日期限制 |
+| `42804` + `raw but expression is of type bytea` | §4 `raw` 写入需 `hextoraw` |
+| `42601` + `"$1"` | §8 in-list 用 `= any(@ids)` |
+| `42601` + `subprogram body is not ended correctly` | §9 PL/SQL 复合语句 |
+| `42P01`（`Relation "xxx" does not exist`） | §11 标识符大小写 |
+| `Parameter 'v' ... out-only parameter` | §12 存储过程输出参数 |
+| `DataException`（内层 `OverflowException`，Rainbow `Insert` 取回主键） | §11 · Rainbow 边界 |
 
 ## 快速开始
 
 ```csharp
+using Dapper;
+
 // 应用启动时调用一次（进程级注册，幂等）
 Dapper.GaussDBSetup.Initialize();
 
@@ -118,9 +136,11 @@ conn.Execute("insert into t (c_blob) values (@blob)", new { blob = new byte[] { 
 
 ### 6. `varchar2(n)` 长度按 UTF-8 字节计
 
-**现象**：`varchar2(10)` 只能存 3 个中文字符（9 字节），超出即报长度错误。
+**现象**：`varchar2(10)` 只能存 3 个中文字符（9 字节），超出即硬报错
+`22001: value too long for type character varying(10)`。
 
-**原因**：`varchar2` 的长度 `n` 是**字节**语义（错误消息虽报 character varying，实际按字节截断）。
+**原因**：`varchar2` 的长度 `n` 是**字节**语义（错误消息虽报 character varying，
+实际按字节计数后拒绝，无截断）。
 
 **正确写法**：按字节预算长度，中文按 3 字节估算。
 
@@ -139,7 +159,8 @@ insert into t (id, v) values (1, 'x') on duplicate key update v = values(v);
 
 ### 8. in-list 数组参数必须写 `= any(@ids)`
 
-**现象**：`where id in @ids` 报服务端 `42601`（错误位置在 `@ids` 处）。
+**现象**：`where id in @ids` 报服务端 `42601`
+（`syntax error at or near "$1"`，位置指向被改写后的 `$1`）。
 
 **原因**：GaussDB 被判为具备数组能力（`FeatureSupport.Arrays = true`），Dapper 走数组分支
 （`SqlMapper.PackListParameters`）把整个数组绑定为**单个**参数，且**不改写 SQL**
@@ -227,14 +248,14 @@ select c_number as CNumber, c_date::timestamp as CDate from t
   PG 协议驱动方可直连。
 - 驱动 `HuaweiCloud.GaussDB.Driver` 仅提供 **net8.0** 目标；.NET Framework 应用无法使用。
 - 因此 **net481 下 GaussDB 分支无测试覆盖**——驱动仅 net8.0，这是固有约束，不是遗漏。
-- 测试密码经 `GAUSSDB_PASSWORD` 环境变量注入（不硬编码）；也可用
+- （维护者）测试密码经 `GAUSSDB_PASSWORD` 环境变量注入（不硬编码）；也可用
   `GaussDBConnectionString` 环境变量整体覆盖连接串。未提供密码时连接探针失败，
   测试被标记为跳过而非误连其它实例。
-- 构建本发行版源码需 .NET 10 SDK（C# 13 / LangVersion 13 + SourceLink 11 工具链）。
+- （维护者）构建本发行版源码需 .NET 10 SDK（C# 13 / LangVersion 13 + SourceLink 11 工具链）。
 
 ## 改动清单
 
-相对上游 Dapper 2.1.89 的改动（完整差异：`git diff d7ee1ee HEAD -- Dapper-2.1.89/`）：
+相对上游 Dapper 2.1.89 的改动（维护者；完整差异：`git diff d7ee1ee HEAD -- Dapper-2.1.89/`）：
 
 | 文件 | 改动 |
 |---|---|
