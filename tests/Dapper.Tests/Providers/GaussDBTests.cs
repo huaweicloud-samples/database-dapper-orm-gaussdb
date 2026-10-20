@@ -35,6 +35,7 @@ namespace Dapper.Tests
         {
             using var conn = Provider.GetOpenConnection();
             var version = conn.ExecuteScalar<string>("select version()");
+            Assert.NotNull(version);
             Assert.Contains("GaussDB", version);
         }
 
