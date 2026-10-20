@@ -14,6 +14,14 @@ namespace Dapper
     /// Represents a database, assumes all the tables have an Id column named Id
     /// </summary>
     /// <typeparam name="TDatabase">The type of database this represents.</typeparam>
+    /// <remarks>
+    /// On GaussDB (A-compatibility mode) the physical table and column names must be lower-case, i.e. the
+    /// tables must have been created with unquoted DDL. A table created with a quoted PascalCase name cannot
+    /// be addressed by Rainbow, because unquoted references are folded to lower case; the failure surfaces as
+    /// <c>Relation "xxx" does not exist</c> (SQLSTATE 42P01) and is easily mistaken for a missing table.
+    /// The same applies to the primary key: the entity must have a column named <c>Id</c> (lower-case
+    /// <c>id</c> on GaussDB).
+    /// </remarks>
     public abstract partial class Database<TDatabase> : IDisposable where TDatabase : Database<TDatabase>, new()
     {
         /// <summary>
@@ -319,15 +327,17 @@ namespace Dapper
         private static readonly ConcurrentDictionary<string, string> tableNameMap = new ConcurrentDictionary<string, string>();
         private string DetermineTableName<T>(string likelyTableName)
         {
-            // cached names are dialect-specific (brackets vs quoted-lower), so include the dialect in the key
+            // cached names are dialect-specific (brackets (SQL Server) vs unquoted (GaussDB, which folds
+            // unquoted identifiers to lower case)), so include the dialect in the key
             var cacheKey = (IsGaussDB ? "gaussdb:" : "sqlserver:") + typeof(T).FullName;
             if (!tableNameMap.TryGetValue(cacheKey, out string name))
             {
                 name = likelyTableName;
                 if (!TableExists(name))
                 {
-                    // GaussDB folds unquoted identifiers to lower case; SQL Server needs brackets.
-                    name = IsGaussDB ? "\"" + typeof(T).Name + "\"" : "[" + typeof(T).Name + "]";
+                    // SQL Server needs brackets; GaussDB folds unquoted identifiers to lower case,
+                    // so the fallback is the bare type name (user creates the table unquoted/lower-case).
+                    name = IsGaussDB ? typeof(T).Name : "[" + typeof(T).Name + "]";
                 }
 
                 tableNameMap[cacheKey] = name;
