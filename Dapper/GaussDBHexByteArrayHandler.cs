@@ -9,7 +9,8 @@ namespace Dapper
     /// </summary>
     /// <remarks>
     /// In GaussDB A-compatibility mode, raw/blob are driver-unmapped types: reading them without a cast
-    /// throws <see cref="NotSupportedException"/>. Query them with an explicit <c>::text</c> cast, which
+    /// fails with <see cref="InvalidCastException"/> ("Reading as 'System.Object' is not supported for
+    /// fields having DataTypeName 'raw'"). Query them with an explicit <c>::text</c> cast, which
     /// yields a hex string (for example <c>'0102ABCD'</c>); this handler converts that text back to bytes.
     /// Values that already arrive as a byte array (for example from a <c>bytea</c> column) pass through.
     /// </remarks>

@@ -9,7 +9,8 @@ namespace Dapper
     /// </summary>
     /// <remarks>
     /// In GaussDB A-compatibility mode, <c>date</c> is the driver-unmapped type <c>datea</c>: reading it
-    /// without a cast throws <see cref="NotSupportedException"/>. Query it with <c>::timestamp</c>
+    /// without a cast fails with <see cref="InvalidCastException"/> ("Reading as 'System.Object' is not
+    /// supported for fields having DataTypeName 'datea'"). Query it with <c>::timestamp</c>
     /// (which Dapper maps natively, no handler required) or with <c>::text</c>, which yields
     /// <c>'17-OCT-26'</c>. The <c>'2026-10-17 00:00:00 AD'</c> spelling is not a <c>::text</c> output: it
     /// is the private <c>datea</c> type's own text representation. This handler parses both spellings.

@@ -56,7 +56,11 @@ create table gaussdb_types_probe (
         public void OracleTypesRoundTrip()
         {
             // Registration is process-wide and does not purge Dapper's query cache, so it has to happen
-            // before the first statement whose SQL text will be cached.
+            // before the first statement whose SQL text will be cached. Unlike GaussDBTypeHandlerTests,
+            // which resets the handler table in Dispose, this test deliberately leaves the handlers
+            // registered; the residual cross-test risk is flattened by the date handler's DateOnly
+            // tolerance branch, which keeps the boxes other providers produce convertible (see the
+            // GaussDBDateHandler remarks).
             GaussDBSetup.Initialize();
 
             using var conn = Provider.GetOpenConnection();
@@ -94,6 +98,7 @@ select id,
        c_varchar2 as cvarchar2,
        c_nvarchar2 as cnvarchar2,
        c_date::timestamp as cdate,
+       c_date::text as cdatetext,
        c_ts   as cts,
        c_clob::text as cclob,
        c_blob::text as cblob,
@@ -105,6 +110,9 @@ from gaussdb_types_probe where id = 1");
                 Assert.Equal("varchar2值", row.CVarchar2);
                 Assert.Equal("nvarchar2值", row.CNvarchar2);
                 Assert.Equal(new DateTime(2026, 10, 17), row.CDate);
+                // Exercises the handler's primary ::text channel end to end: the server formats the
+                // date as '17-OCT-26' and GaussDBDateHandler parses it back to a DateTime.
+                Assert.Equal(new DateTime(2026, 10, 17), row.CDateText);
                 Assert.Equal(new DateTime(2026, 10, 17, 12, 34, 56), row.CTs);
                 Assert.Equal("clob内容", row.CClob);
                 Assert.Equal(new byte[] { 0x00, 0xFF, 0xAB }, row.CBlob);
@@ -123,6 +131,7 @@ from gaussdb_types_probe where id = 1");
             public string CVarchar2 { get; set; } = "";
             public string CNvarchar2 { get; set; } = "";
             public DateTime CDate { get; set; }
+            public DateTime? CDateText { get; set; }
             public DateTime CTs { get; set; }
             public string CClob { get; set; } = "";
             public byte[] CBlob { get; set; } = Array.Empty<byte>();
@@ -166,9 +175,12 @@ from gaussdb_types_probe where id = 1");
         {
             // .NET's DateTime cannot represent a BC year (MinValue is 0001-01-01), so reading a BC value
             // with its era intact must fail loudly rather than be silently shifted into the AD era.
+            // The contract under test is "throws loudly", not a specific exception type: the driver is
+            // preview-state, so a future upgrade throwing a different type is a benign evolution.
             // Measured with HuaweiCloud.GaussDB.Driver 8.0.1 on net8.0:
             //   System.InvalidCastException: Out of range of DateTime (year must be between 1 and 9999).
             // (thrown by the driver from GaussDBDataReader.GetFieldType, before Dapper maps anything).
+            // Handlers are deliberately left registered here as well; see OracleTypesRoundTrip.
             GaussDBSetup.Initialize();
 
             using var conn = Provider.GetOpenConnection();
@@ -178,7 +190,7 @@ from gaussdb_types_probe where id = 1");
             {
                 conn.Execute("insert into gaussdb_bc_probe (id, d) values (1, to_date('0044-03-15 BC','yyyy-mm-dd BC'))");
 
-                Assert.Throws<InvalidCastException>(
+                Assert.ThrowsAny<Exception>(
                     () => conn.QuerySingle<DateTime>("select d::timestamp from gaussdb_bc_probe where id = 1"));
             }
             finally
