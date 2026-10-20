@@ -1,4 +1,5 @@
 #if NET8_0_OR_GREATER
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Dapper.Tests
@@ -33,12 +34,15 @@ namespace Dapper.Tests
         }
 
         [GaussDBTests.FactGaussDB]
-        public void InsertGetFirstDeleteRoundTrip()
+        public async Task InsertGetFirstDeleteRoundTrip()
         {
             using var conn = DatabaseProvider<GaussDBProvider>.Instance.GetOpenConnection();
             // The property is "Widgets" while the physical table is "widget", so the probe misses and
             // the name falls back to the bare type name: the GaussDB fallback branch under test, which
             // must stay unquoted (quotes would defeat the server's folding of unquoted identifiers).
+            // dappertest is shared, so a leftover "widgets" table (from an interrupted run) would make
+            // the probe hit and resolve the name to "Widgets" instead of exercising that fallback.
+            conn.Execute("drop table if exists widgets");
             conn.Execute("drop table if exists widget");
             conn.Execute("create table widget (Id serial primary key, Name varchar2(60))");
             try
@@ -60,6 +64,16 @@ namespace Dapper.Tests
                 Assert.True(db.Widgets.Delete(id.Value));
                 Assert.Null(db.Widgets.Get(id.Value));
 
+                // The async branches spell their GaussDB SQL themselves ("returning Id" for the insert,
+                // "limit 1" for the first). The delete above emptied the table, so the limit-1 row is
+                // necessarily the one just inserted.
+                int? asyncId = await db.Widgets.InsertAsync(new { Name = "gamma" });
+                Assert.True(asyncId > 0);
+
+                var asyncFirst = await db.Widgets.FirstAsync();
+                Assert.NotNull(asyncFirst);
+                Assert.Equal("gamma", asyncFirst.Name);
+
                 // A POCO carrying Id: Insert drops "Id" from the column list, so the serial column
                 // supplies the key rather than the property's 12345.
                 int? pocoId = db.Widgets.Insert(new Widget { Id = 12345, Name = "beta" });
@@ -75,6 +89,7 @@ namespace Dapper.Tests
             }
             finally
             {
+                conn.Execute("drop table if exists widgets");
                 conn.Execute("drop table if exists widget");
             }
         }
