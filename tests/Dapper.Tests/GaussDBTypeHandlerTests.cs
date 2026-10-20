@@ -133,6 +133,36 @@ namespace Dapper.Tests
         }
 
         [Fact]
+        public void DateHandlerRejectsBcTimestampText()
+        {
+            // timestamp::text keeps the era and appends " BC"; the handler must reject it rather than
+            // parse 0044 as an AD year.
+            var handler = new GaussDBDateHandler();
+            Assert.Throws<NotSupportedException>(() => handler.Parse("0044-03-15 12:34:56 BC"));
+        }
+
+        [Fact]
+        public void DateHandlerParsesBareIsoDate()
+        {
+            var handler = new GaussDBDateHandler();
+            Assert.Equal(new DateTime(2026, 10, 17), handler.Parse("2026-10-17"));
+        }
+
+        [Fact]
+        public void DateHandlerThrowsOnMalformedInput()
+        {
+            var handler = new GaussDBDateHandler();
+            Assert.Throws<FormatException>(() => handler.Parse("not-a-date"));
+        }
+
+        [Fact]
+        public void DateHandlerParsesLowercaseMonth()
+        {
+            var handler = new GaussDBDateHandler();
+            Assert.Equal(new DateTime(2026, 10, 17), handler.Parse("17-oct-26"));
+        }
+
+        [Fact]
         public void DateHandlerUsesOracleRrYearSemantics()
         {
             var handler = new GaussDBDateHandler();

@@ -10,8 +10,16 @@ namespace Dapper
     /// <remarks>
     /// In GaussDB A-compatibility mode, <c>date</c> is the driver-unmapped type <c>datea</c>: reading it
     /// without a cast throws <see cref="NotSupportedException"/>. Query it with <c>::timestamp</c>
-    /// (which Dapper maps natively, no handler required) or <c>::text</c>, which yields either
-    /// <c>'17-OCT-26'</c> or <c>'2026-10-17 00:00:00 AD'</c>. This handler parses both spellings.
+    /// (which Dapper maps natively, no handler required) or with <c>::text</c>, which yields
+    /// <c>'17-OCT-26'</c>. The <c>'2026-10-17 00:00:00 AD'</c> spelling is not a <c>::text</c> output: it
+    /// is the private <c>datea</c> type's own text representation. This handler parses both spellings.
+    /// <para>
+    /// A BC-era value must not be read through the <c>::text</c> channel: <c>date::text</c> formats it as
+    /// <c>'15-MAR-44'</c> with no era marker, so the era is already lost by the time this handler sees the
+    /// text and the value would be silently misread as 2044 AD. Use <c>::timestamp</c> for BC dates
+    /// instead; its text form keeps the era (<c>'0044-03-15 12:34:56 BC'</c>) and is rejected below
+    /// rather than misread.
+    /// </para>
     /// <para>
     /// Because registration is process-wide for <see cref="DateTime"/>, the handler also accepts the
     /// boxes other providers produce for date columns: a boxed <c>DateOnly</c> is converted the same way
@@ -45,6 +53,9 @@ namespace Dapper
             return culture;
         }
 
+        // Dapper's SqlMapper.LookupDbType resolves DateTime from its built-in type map before it consults
+        // registered type handlers, so Dapper's write path never reaches this method. It exists to satisfy
+        // the TypeHandler<T> contract, and for direct callers.
         /// <inheritdoc/>
         public override void SetValue(IDbDataParameter parameter, DateTime value)
         {
