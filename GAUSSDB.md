@@ -35,12 +35,16 @@ var rows = conn.Query<Order>("select * from orders where id = @id", new { id = 1
 
 需要 `HuaweiCloud.GaussDB.Driver`（官方 .NET 驱动，Npgsql 8.0 fork，仅 net8.0）。
 
-关于注册语义，有三点必须注意：
+关于注册语义，有四点必须注意：
 
 - `GaussDBSetup.Initialize()` 是**进程级全局注册**，幂等，可多线程重复调用。
 - 注册必须**早于任何查询**。`SqlMapper.AddTypeHandler` 不会清空 Dapper 的查询缓存，
   SQL 文本已被缓存的查询会继续使用此前解析出的反序列化器。若无法保证注册时机，
   在 `Initialize()` 之后调用 `SqlMapper.PurgeQueryCache()` 强制重新解析。
+- `Initialize()` 是**保守注册**：对**已有第三方 handler 的类型不覆盖**。若进程内其它组件
+  已经注册了 `DateTime` / `byte[]` handler，GaussDB 的对应 handler 不会生效
+  （`c_date::text` / `raw::text` 通道随之失效），需要自行调整注册顺序，或在 `Initialize()`
+  之前先 `SqlMapper.ResetTypeHandlers()` 清掉旧注册。
 - handler **只在读侧生效**。Dapper 的写入路径（`SqlMapper.LookupDbType`）先从内建类型表
   解析 `DateTime` / `byte[]`，不会走到 handler，写参数由驱动与服务端直接接收；
   handler 的 `SetValue` 仅为满足接口契约而存在。
@@ -100,9 +104,10 @@ from t where id = @id
 ### 3. `date` handler 的 DateStyle 假设
 
 **现象**：`GaussDBDateHandler` 用 `TryParseExact` 匹配一组显式格式：Oracle 形态
-`DD-MON-RR`（如 `17-OCT-26`，即 `date::text` 的输出）与驱动直读的 ISO 形态
-`2026-10-17 00:00:00`（`TextFormats[0]`）都命中这条主通道；`AD` 纪元后缀可解析、
-`BC` 后缀**主动拒绝**，月份大小写不敏感；全部格式均不匹配时才兜底 `DateTime.Parse`。
+`DD-MON-RR`（如 `17-OCT-26`，即 `date::text` 的输出）与 `datea` 私有类型自身文本表示的
+ISO 形态 `2026-10-17 00:00:00`（带 `AD` 后缀，剥掉后缀后命中 `TextFormats[0]`）都命中这条
+主通道；`AD` 纪元后缀可解析、`BC` 后缀**主动拒绝**，月份大小写不敏感；全部格式均不匹配时
+才兜底 `DateTime.Parse`。
 
 **原因**：`::text` 的 `DD-MON-RR` 拼写由服务端格式化产生，解析结果依赖服务端 DateStyle
 的输出默认设定。
