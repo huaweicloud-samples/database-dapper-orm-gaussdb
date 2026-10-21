@@ -17,8 +17,10 @@ Dapper 框架自身的使用方式（`Query` / `Execute` / 多对象映射 / 存
 
 ## 适配内容
 
-本发行版配套官方 .NET 驱动 `HuaweiCloud.GaussDB.Driver` 8.0.1（基于 Npgsql 8.0，
-仅提供 net8.0 目标框架），主要变更如下：
+本发行版配套官方 .NET 驱动
+[HuaweiCloud.GaussDB.Driver](https://www.nuget.org/packages/HuaweiCloud.GaussDB.Driver)
+8.0.1（基于 Npgsql 8.0，仅提供 net8.0 目标框架；源代码仓库：
+<https://github.com/HuaweiCloudDeveloper/gaussdb-dotnet>），主要变更如下：
 
 | 变更项 | 说明 |
 |---|---|
@@ -40,8 +42,8 @@ GaussDB 的存量项目升级至本版本无需任何代码变更。
 
 ## 部署指南
 
-1. 安装 `HuaweiCloud.GaussDB.Driver`（官方 .NET 驱动，仅提供 **net8.0** 目标框架，
-   .NET Framework 应用不适用）。
+1. 安装 [HuaweiCloud.GaussDB.Driver](https://www.nuget.org/packages/HuaweiCloud.GaussDB.Driver)
+   （官方 .NET 驱动，仅提供 **net8.0** 目标框架，.NET Framework 应用不适用）。
 2. 在应用启动阶段调用一次 `Dapper.GaussDBSetup.Initialize()`（进程级注册、幂等；须
    先于首条查询执行，注册语义的注意事项见 GAUSSDB.md 快速开始）。
 3. 完成上述步骤后即可使用标准 Dapper API。读取 Oracle 私有类型列（`date` / `raw` /

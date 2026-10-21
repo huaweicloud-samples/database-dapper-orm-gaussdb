@@ -17,8 +17,8 @@
 
 - **.NET 10 SDK**——构建的必要条件（C# 13 / LangVersion 13 + SourceLink 11 工具链，
   .NET 8 SDK 无法完成编译）。
-- **.NET 8 运行时**——`HuaweiCloud.GaussDB.Driver` 仅提供 net8.0 目标，GaussDB 连库
-  用例仅存在于 net8.0 及更高 TFM。
+- **.NET 8 运行时**——[HuaweiCloud.GaussDB.Driver](https://www.nuget.org/packages/HuaweiCloud.GaussDB.Driver)
+  仅提供 net8.0 目标，GaussDB 连库用例仅存在于 net8.0 及更高 TFM。
 - **GaussDB 507 集中式实例**（A 兼容模式）——连库用例所需，本地环境可通过 Docker
   部署；服务端须启用 MD5 认证（`password_encryption_type = 1`），与部署要求一致
   （见 GAUSSDB.md）。
